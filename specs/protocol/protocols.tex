@@ -1,0 +1,193 @@
+
+\yellow{}
+
+%Swarm is a network operated by its users. Each node in the network is supposed to run a client complying with the protocol specifications. On the lowest level, the nodes in the network connect using a peer-to-peer network protocol as their transport layer. This is called the \gloss{underlay network}. 
+%In its overall design, Swarm is agnostic of the particular underlay transport used as long as it satisfies the following requirements.
+
+%\begin{enumerate}[noitemsep]
+%    \item \emph{addressing} -- Nodes are identified by their \gloss{underlay address}. 
+%    \item \emph{dialing} -- Nodes can initiate a direct connection to a peer by dialing them on their underlay address.
+%    \item \emph{listening} -- Nodes can listen to other peers dialing them and can accept incoming connections. Nodes that do not accept incoming connections are called \glossplural{light node}.
+%    \item \emph{live connection} -- A node A node connection establishes a channel of communication which is kept alive until explicit disconnection, so that the existence of a connection means the remote peer is online and accepting messages.
+%    \item \emph{channel security} -- 
+%    The channel provides identity verification and implements encrypted and authenticated transport resisting man-in-the-middle attacks.
+%    \item \emph{protocol multiplexing} -- 
+%    The underlay network service can accommodate several protocols running on the same connection. Peers communicate the protocols with the name and versions that they implement, and the underlay service identifies compatible protocols and starts up peer connections on each matched protocol.
+%    \item \emph{delivery guarantees} --  
+%    Protocol messages have \gloss{guaranteed delivery}, i.e. delivery failures due to network problems result in direct error response. 
+%    Order of delivery of messages within each protocol is guaranteed. 
+%    Ideally, the underlay protocol provides prioritisation. 
+%    If protocol multiplexing occurs on the same transport channel, this most likely implies framing to prevent long messages from blocking higher priority messages.
+%    \item \emph{serialisation} -- 
+%    The protocol message construction supports arbitrary data structure serialisation conventions.
+    
+%\end{enumerate}
+
+%The \gloss{libp2p} library can provide all the needed functionality and is the designated underlay connectivity driver in the specification.%
+%
+%\footnote{Swarm's initial Golang implementation uses Ethereum's \gloss{devp2p}/rlpx which satisfies the above criteria and uses TCP/IP with custom cryptography added for security. The underlay network address that devp2p uses is represented using the \gloss{enode URL scheme}. Devp2p dispatches protocol messages based on their message ID. It uses RLP serialisation which is extended with higher level data type representation conventions. In order to provide support for the Ethereum 1.x blockchain and for storing its state on Swarm, we may provide a thin devp2p node that proxies queries to the new libp2p-based Swarm client, or just uses its API. Otherwise we expect the devp2p networking support to be discontinued.}
+
+%\subsection{libp2p transport layer \statusgreen}
+
+%The \lstinline{libp2p} networking stack provides all the required properties for the Swarm underlay network, as laid out in \ref{sec:underlay-transport}.
+
+%\begin{enumerate}[noitemsep]
+%\item Addressing is facilitated through the use of \emph{multi addresses}, known as underlay addresses, assigned to each node. Every node can have multiple underlay addresses depending on the configured network listening addresses and transports.
+%\item Dialing is provided over \lstinline{libp2p} supported network transports.
+%\item Listening is provided by \lstinline{libp2p} supported network transports.
+%\item Live connections are established and maintained between two peers, ensuring the ability to send and receive messages.
+%\item Channel security is ensured through \lstinline{TLS} and the \lstinline{libp2p secio} stream security transport.
+%\item Protocol multiplexing is provided by the \lstinline{libp2p mplex} stream multiplexer protocol.
+%\item Delivery guarantees are provided by using \lstinline{libp2p} bidirectional streams to validate the responses from peers upon message transmission.
+%\item Serialization is not enforced by \lstinline{libp2p}, as allows for byte streams, providing flexibility for each protocol to choose the most appropriate serialization method. The recommended serialization approach is using \lstinline{Protobuf} with \lstinline{varint} delimited messages in streams.
+%\end{enumerate}
+
+%\subsection{Protocols and streams \statusgreen}
+
+%Communication between peers is organised in protocols as logical units under a unique name that may define one or more \emph{streams}. \lstinline{libp2p} provides streams as the basic channel for communication. Streams are full-duplex channels of bytes, multiplexed over a single connection between two peers.
+
+%Every stream defines:
+
+%\begin{itemize}
+%\item a version that follows semantic versioning in semver form
+%\item data serialization definitions
+%\item sequence of data passing between peers over a full-duplex stream
+%\end{itemize}
+
+%Streams are identified by \lstinline{libp2p} case-sensitive protocol IDs. The following convention is used construct stream identifiers:
+
+%\begin{lstlisting}
+%/swarm/ProtocolName/ProtocolVersion/StreamName
+%\end{lstlisting}
+
+%\begin{itemize}
+%\item All stream IDs are prefixed with \lstinline{/swarm}.
+%\item \lstinline{ProtocolName} is an arbitrary string that identifies the protocol.
+%\item \lstinline{ProtocolVersion} is a string in semver form that is used to specify compatibility between protocol implementations over time.
+%\item \lstinline{StreamName} is an arbitrary string that identifies a stream defined as part of the protocol.
+%\end{itemize}
+
+%\subsection{Data exchange sequences \statusgreen}
+
+%A data passing sequence must be synchronous under one opened stream. Multiple streams can be opened at the same time that are multiplexed over the same connection exchanging data independently and asynchronously. Streams may use different data exchange sequences such as:
+
+%\begin{itemize}
+%\item \emph{single message sending} - not waiting for the response by the peer if it is not needed before closing the stream.
+%\item \emph{multiple message sending} - a series of data that is sent to a peer without reading from it before closing the stream.
+%\item \emph{request/response} - requires a single response for a single request before closing the stream.
+%\item \emph{multiple requests/response cycles} - require a synchronous response after every request before closing the stream.
+%\item \emph{exact message sequence} -  requires multiple message types over a single stream in an exact order (see the handshake protocol in \ref{spec:protocol:hive}).
+%\end{itemize}
+
+%Streams have predefined sequences that are kept as simple as possible for a single purpose. For complex message exchanges, multiple streams should be used.
+
+%Streams may be short lived for immediate data exchange or communication, or long lived for notifications if needed.
+
+%\subsection{Stream headers}
+
+%A Swarm specific requirement for all libp2p streams is to exchange Header protobuf messages on every stream initialization between two peers. This message encapsulates a stream scoped information that needs to be exchanged before any stream specific data or messages are exchanged. Headers are sequences of key value pairs, where keys are arbitrary strings and values are byte arrays that do not impose any specific encoding. Every key may use appropriate encoding for the data that it relates to.
+
+%\begin{definition}[Header message]\label{def:headers-message}
+
+%\begin{lstlisting}[language=protobuf3]
+%syntax = "proto3";
+
+%package pb;
+
+%message Headers {
+%    repeated Header headers = 1;
+%}
+
+%message Header {
+%  string key = 1;
+%  bytes value = 2;
+%}
+%\end{lstlisting}
+%\end{definition}
+
+%On every stream initialization, the peer that creates it, is sending Headers message regardless if it contains header values or not. The receiving node must read this message and respond with response header using the same message type. This makes the header exchange sequence finished and any other stream data can be transmitted depending on the protocol.
+
+%Standard header key names are defined here:
+
+%\begin{enumerate}
+%\item tracing-span-context
+%\end{enumerate}
+
+
+%\subsection{Encapsulation of context for tracing \statusgreen}
+
+%P2P Stream scoped tracing span context is exchanged by using stream headers. Header key "tracing-span-context" is reserved for binary encoded tracing span context data. This context should be used in tracing messages. The stream initiator node should provide tracing span context to the responding node. This context is optional and all nodes must function the same as span context is provided by other nodes or not regardless if the node has tracing configured or not.
+
+\section{Protocols \statusgreen}\label{sec:protocols}
+
+Swarm Bee organizes P2P communication in protocols as logical units
+under a unique name that may define one or more streams for
+communication.
+
+\subsubsection{Headers}\label{headers}
+
+A Swarm specific requirement for all libp2p streams is to exchange
+Header protobuf messages on every stream initialization between two
+peers. This message encapsulates a stream scoped information that needs
+to be exchanged before any stream specific data or messages are
+exchanged. Headers are sequences of key value pairs, where keys are
+arbitrary strings and values are byte arrays that do not impose any
+specific encoding. Every key may use appropriate encoding for the data
+that it relates to.
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{syntax = }\StringTok{"proto3"}\NormalTok{;}
+
+\KeywordTok{package}\NormalTok{ headers;}
+
+\KeywordTok{message}\NormalTok{ Headers \{}
+    \KeywordTok{repeated}\NormalTok{ Header headers = }\DecValTok{1}\NormalTok{;}
+\NormalTok{\}}
+
+\KeywordTok{message}\NormalTok{ Header \{}
+  \DataTypeTok{string}\NormalTok{ key = }\DecValTok{1}\NormalTok{;}
+  \DataTypeTok{bytes}\NormalTok{ value = }\DecValTok{2}\NormalTok{;}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+On every stream initialization, the peer that creates it, is sending
+\texttt{Headers} message regardless if it contains header values or not.
+The receiving node must read this message and respond with response
+header using the same message type. This makes the header exchange
+sequence finished and any other stream data can be transmitted depending
+on the protocol.
+
+\subsubsection{Streams}\label{streams}
+
+Libp2p provides Streams as the basic channel for communication. Streams are full-duplex channels of bytes, multiplexed over a singe connection between two peers.
+
+Every stream defines:
+\begin{itemize}
+    \item a version that follows semantic versioning in semver form.
+    \item data serialization definitions.
+    \item sequence of data passing between peers over a full-duplex stream.
+\end{itemize}
+Streams are identified by libp2p case-sensitive protocol IDs. Swarm Bee uses the following convention to construct stream identifiers:
+
+\texttt{/\ swarm\ /\{\ ProtocolName\ \}/\{\ ProtocolVersion\ \}/\{\ StreamName\ \}}
+\begin{itemize}
+    \item All stream IDs are prefixed with \texttt{/swarm}.    
+    \item ProtocolName is a string in a free form that identifies the Swarm protocol.
+    \item ProtocolVersion is a string in a semver form that is used to specify compatibility between protocol implementations over time.
+    \item StreamName is a string in a free form that identifies a defined stream under the Swarm protocol.
+\end{itemize}
+Data passing sequence must be synchronous under one opened stream.
+Multiple streams can be opened at the same time that are multiplexed
+over the same connection exchanging data independently and
+asynchronously. Streams may use different data exchanging sequences,
+such as:
+\begin{itemize}
+    \item single message sending not waiting for the response by the peer if it is not needed before closing the stream.
+    \item multiple message sending a series of data that is sent to a peer without reading from it before
+closing the stream
+    \item request/response requiring a single response for a single request before closing the stream
+    \item  multiple requests/response
+    \item cycles requiring a synchronous response after every request before closing the stream
+exact message sequence requiring multiple message types over a single stream in an exact order, such as in the handshake protocol Streams must have a well predefined sequences, that are kept as simple as possible for a single purpose. For complex message exchanges, multiple streams should be used. Streams may be short lived for immediate data exchange or communication, or long lived for notifications if needed.
+\end{itemize}

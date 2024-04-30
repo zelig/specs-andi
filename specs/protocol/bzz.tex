@@ -1,0 +1,105 @@
+
+Handshake protocol is the protocol that is always run after two peers
+are connected and before any other protocols are established. It
+communicated information about peer \texttt{Overlay} address, network
+\texttt{ID} and light node capability.
+
+%The bzz handshake protocol is the protocol that is always run after two peers are connected and before any other protocols are established. It communicates information about peer \texttt{Overlay} address, network \texttt{ID}, and light node capability.
+
+The handshake protocol defines only one stream:
+\begin{itemize}
+    \item ID: \texttt{/swarm/handshake/1.0.0/handshake} 
+    \item Serialization: Varint delimited Protobuf
+\end{itemize}
+
+Message definition:
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{syntax = }\StringTok{"proto3"}\NormalTok{;}
+
+\KeywordTok{package}\NormalTok{ handshake;}
+
+\KeywordTok{message}\NormalTok{ Syn \{}
+    \DataTypeTok{bytes}\NormalTok{ ObservedUnderlay = }\DecValTok{1}\NormalTok{;}
+\NormalTok{\}}
+
+\KeywordTok{message}\NormalTok{ Ack \{}
+\NormalTok{    BzzAddress Address = }\DecValTok{1}\NormalTok{;}
+    \DataTypeTok{uint64}\NormalTok{ NetworkID = }\DecValTok{2}\NormalTok{;}
+    \DataTypeTok{bool}\NormalTok{ FullNode = }\DecValTok{3}\NormalTok{;}
+    \DataTypeTok{bytes}\NormalTok{ Nonce = }\DecValTok{4}\NormalTok{;}
+    \DataTypeTok{string}\NormalTok{ WelcomeMessage  = }\DecValTok{99}\NormalTok{;}
+\NormalTok{\}}
+
+\KeywordTok{message}\NormalTok{ SynAck \{}
+\NormalTok{    Syn Syn = }\DecValTok{1}\NormalTok{;}
+\NormalTok{    Ack Ack = }\DecValTok{2}\NormalTok{;}
+\NormalTok{\}}
+
+\KeywordTok{message}\NormalTok{ BzzAddress \{}
+    \DataTypeTok{bytes}\NormalTok{ Underlay = }\DecValTok{1}\NormalTok{;}
+    \DataTypeTok{bytes}\NormalTok{ Signature = }\DecValTok{2}\NormalTok{;}
+    \DataTypeTok{bytes}\NormalTok{ Overlay = }\DecValTok{3}\NormalTok{;}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+%\begin{definition}[Bzz handshake protocol  messages]\label{def:bzz-messages}
+
+%\begin{lstlisting}
+%// ID: /swarm/handshake/1.0.0/handshake
+
+%syntax = "proto3";
+
+%message Syn {
+%    bytes Address = 1;
+%    int32 NetworkID = 2;
+%    bool Light = 3;
+%}
+
+%message SynAck {
+%    Syn Syn = 1;
+%    Ack Ack = 2;
+%}
+
+%message Ack {
+%    bytes Address = 1;
+%}
+%\end{lstlisting}
+%\end{definition}
+
+This message sequence is inspired by the TCP three way handshake to ensure message deliverability.
+
+Upon connection a requesting peer constructs a new handshake stream and sends a \lstinline{Syn} message with its \lstinline{Overlay} address, \lstinline{Network ID} and \lstinline{Lightnode} capability flag, and waits for \lstinline{SynAck} response message from the responding peer. It then
+sends its own \texttt{Syn} information and also \texttt{Ack} with the
+received \texttt{Overlay} address for confirmation by the requesting
+peer. After the requesting peer receives the \texttt{SynAck} message
+from the responding peer and validates that the received \texttt{Ack}
+information in it is correct, it sends the \texttt{Ack} message as a
+confirmation to the responding peer. The stream is closed by the
+responding peer after it receives the \texttt{Ack} message. If network
+IDs are not the same between to peers, the connection must be terminated
+during the \texttt{Syn\ -\ SynAck} exchange. Connection must be
+terminated if the handshake is performed between two peers multiple
+times over the same connection.
+
+%In  the  \lstinline{SynAck} message responder sends it own \lstinline{Syn} message as well as an acknowledgement with the received Overlay address. After the requesting peer receives the \lstinline{SynAck} message from the responding peer and validates that the received \lstinline{Ack} information in it is correct, it sends an \lstinline{Ack} message itself as a confirmation to the responding peer. The stream is closed by the responding peer after it receives the \lstinline{Ack} message.
+
+%The connection must be terminated if network IDs are do not match or if the  exact  order of messages is not followed.
+
+%The bzz address is verified and overlay, underlay and signature are extracted.
+%light is a boolean field indicating whether the node is operating as a light (as opposed to full) node.
+
+%After the handshake,  each peer should remember the following data about the other:
+
+%\begin{itemize}
+%    \item the overlay address - used in forwarding  (see  \ref{spec:strategy:forwarding}),
+%    \item the underlay address - used for dialing, passed to the underlay network protocol when the connectivity driver needs to connect to the peer (see \ref{spec:strategy:connection}),
+%    \item the bzz address signature - needed by the hive protocol to pass information about the node to other peers (see \ref{spec:protocol:hive}),
+%    \item whether the peer is a light node.
+%\end{itemize}
+
+% \subsection{Encapsulation of price information \statusred}
+
+
+

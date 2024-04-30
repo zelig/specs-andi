@@ -1,0 +1,119 @@
+
+\begin{definition}[chunking \statusgreen]
+\label{def:chunking}
+The \emph{split} function splits an arbitrary byte slice into chunks.
+\begin{eqnarray}
+\mathit{split}&:&\mathit{byte}{*}\mapsto\mathit{Chunk}{*}\\
+\mathit{split}(d)&\defeq&\langle c_0, c_1, \ldots c_{n-1}\rangle\\
+\end{eqnarray}
+such that
+\begin{eqnarray}
+c_i&=&\mathit{CAC}(d[o\rangedel o+l],l)\\
+&&\text{for }0\leq i<\mathit{int}( \frac{\mathit{len}(d)-1}{4096})+1
+\\
+\text{offset }o&=&i\cdot 4096\\
+\text{length }l&=&\begin{cases}
+\mathit{len}(d)-o&\text{if }o+4096>\mathit{len}(d)\\
+4096&\text{otherwise}
+\end{cases}
+\end{eqnarray}
+\end{definition}
+
+\begin{definition}[Swarm file level chunks $\Psi$ \statusgreen]
+\label{def:lambda}
+\begin{eqnarray}
+\Psi&:&\mathit{byte}{*}\mapsto\mathit{uint8}\mapsto\mathit{Chunks}{*}\\
+\text{data chunks }\Psi(d,0)[i] &\defeq&\mathit{split}(d)[i]\\ 
+&&\text{for }0\leq i< \mathit{len}(\mathit{split}(d))\\
+\text{intermediate chunks }\Psi(d,j)[i]&\defeq&\mathit{Pack}( 
+\Psi(d,j-1)[o],\ldots,\Psi(d,j-1)[o+l])\\
+&&\text{for }0\leq i<\mathit{len}(\Psi(d,j-1))\\
+\text{offset }o&=&i\cdot 128\\
+\text{length }l&=&\begin{cases}
+\mathit{len}(\Psi(d,j-1))-o&\text{if }o+128>\mathit{len}(\Psi(d,j-1))\\
+128&\text{otherwise}
+\end{cases}
+\end{eqnarray}
+where
+\begin{eqnarray}
+\mathit{Pack}&:&\mathit{Chunks}^m\mapsto\mathit{Chunks}\\
+\mathit{Pack}(c_0,\ldots ,c_{n-1})&\defeq&
+\begin{cases}
+c_0&\text{if }n=1\\
+\mathit{CAC}(\Concat_{i=0}^{n-1}\mathit{Address}(c_i),\sum_{i=0}^{n-1}\mathit{span}(c_i))&\text{otherwise}
+\end{cases}
+\end{eqnarray}
+Define the swarm file hash root chunk as $\mathit{Root}(d) = \Psi(d,j)[0]$ with the smallest $j$ such that $\mathit{len}(\Psi(d,j))=1$. We define $j$ as the \emph{Depth} of (the swarm representation of the file) data $d$.  
+\end{definition}
+
+\begin{definition}[Swarm File Hash $\mathit{H}^{+}$ \statusgreen]
+\label{def:swarm-hash}
+\begin{eqnarray}
+\mathit{H}^{+}&:&\mathit{byte}{*}\mapsto\mathit{Address}\\
+\mathit{H}^{+}(d)&\defeq&\mathit{Address}(\mathit{Root}_{\Psi}(d))
+\end{eqnarray}
+\end{definition}
+
+\begin{definition}[Random access path for files \statusgreen]
+\label{def:random-access-path}
+Define the random access path $\tau(d,i)$ for file $d$ as the sequence of chunks in the the swarm hash tree leading from the root chunk via intermediate chunks to the data chunk containing segment $i$.
+
+\begin{eqnarray}
+\tau&:&\mathit{byte}{*}\times\mathit{uint64}\mapsto\mathit{Chunks}^m\\
+\tau(d, j)&\defeq&\langle c_0, c_1, \ldots c_{n-1}\rangle
+\end{eqnarray}
+such that
+\begin{eqnarray}
+c_i&\defeq&
+\begin{cases}
+\mathit{Root}_\Psi(d)&\text{if }i=0\\
+\mathit{Segment}(c_{i-1}, \mathit{index}(c_{i-1}, 32\cdot j))&\text{otherwise} 
+\end{cases}
+\end{eqnarray}
+where
+\begin{eqnarray}
+\mathit{index}&:&\mathit{Chunks}\times\mathit{uint64}\mapsto\overline{0,127}\\
+\mathit{index}(c, o)&\defeq&\mathit{int}\left(\frac{k}{m}\right)\\
+\text{offset within subtree }k&=&o \mod 128^{\mathit{depth}(c)}\\
+\text{max span of children } m&=&128^{\mathit{depth}(c)-1}
+\end{eqnarray}
+and
+\begin{eqnarray}
+\mathit{depth}&:&\mathit{Chunks}\mapsto \mathit{uint8}\\
+\mathit{depth}(s)&\defeq&\Psi \text{ such that } 128^{\Psi-1}<\mathit{span}(c)\leq 128^\Psi
+\end{eqnarray}
+\end{definition}
+
+\begin{definition}[Segment inclusion proof for files \statusgreen]
+\label{def:sip+}
+Define the Segment Inclusion Proof $\Pi[\textsc{\lowercase{SIP}}^{+}](d, j)$ for file $d$ as the series of chunk-inclusion proofs of the random access path to the segment at index  $j$.
+
+\begin{eqnarray}
+\Pi[\textsc{\lowercase{SIP}}^{+}]&:&\mathit{byte}{*}\times\mathit{uint64}\\
+\Pi[\textsc{\lowercase{SIP}}^{+}](d, j)&\defeq&\langle p_0, p_1, \ldots p_{n-1}\rangle
+\end{eqnarray}
+such that
+\begin{eqnarray}
+p_i&\defeq&
+\Pi[\textsc{\lowercase{SIP}}](\tau(d,j)[i], \mathit{index}(\tau(d,j)[i],32\cdot j))
+\end{eqnarray}
+\end{definition}
+
+\begin{definition}[Segment Inclusion Proof validity for files \statusgreen]
+\label{def:sip+-validity}
+Define the validator function $\mathit{Valid}[\textsc{\lowercase{SIP}}^{+}](a,s,j,p)$ for Segment Inclusion Proof $p$ for a file with swarm hash $a$ having segment $s$ at index  $j$.
+
+\begin{eqnarray}
+\mathit{Valid}[\textsc{\lowercase{SIP}}^{+}]&:&\mathit{Address}\times\mathit{Segment}\times\mathit{uint64}\times\Pi[\textsc{\lowercase{SIP}}^{+}]\mapsto\{\mathtt{T,F}\}\\
+\mathit{Valid}[\textsc{\lowercase{SIP}}^{+}](a,s,j,p)&\Leftrightarrow&\\
+&&\mathit{Valid}[\textsc{\lowercase{SIP}}](a_{i+1}, a_i,j,p_i)
+\text{ for }0\leq i<n\\
+&&a_n=a
+\end{eqnarray}
+where
+\begin{eqnarray}
+p&=&\langle p_0, p_1, \ldots, p_{n-1}\rangle\\
+a_0&=&s
+\end{eqnarray}
+\end{definition}
+

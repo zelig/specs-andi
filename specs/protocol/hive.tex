@@ -1,0 +1,156 @@
+The \gloss{hive protocol} enables nodes to get information about other peers that are relevant to them in order to bootstrap their connectivity. The information communicated are both overlay and underlay addresses of the known remote peers (see  \ref{spec:format:bzzaddress}). %The overlay address serves to select peers to achieve the connectivity pattern needed for the desired network topology. Underlay address is needed to establish the peer connections by dialling selected peers.
+
+\subsubsection{Hive}
+
+The hive protocol defines how nodes exchange information about their peers in order to reach and maintain a saturated Kademlia connectivity.
+
+The exchange of this information happens upon connection, however nodes can broadcast newly received peers to their peers during the lifetime of connection.
+
+%While the simplest approach is to share all known peers (during an exchange) it might be more optimal to narrow down to a useful subset of peers - for instance all the peers up to a certain depth or belonging to a certain bin.
+
+%The exchanged information includes both overlay and underlay addresses of the known remote peers.
+
+The overlay address serves to select peers to achieve the connectivity pattern needed for the desired network topology, while the underlay address is needed to establish the peer connections by dialing selected peers.
+
+Upon receiving a peer's message, nodes should store the peer information in their address book, i.e., a data structure containing info about peers known to the node that is meant to be persisted across sessions.
+
+Upon request from downstream (connect) - the node will send the known
+peer addresses in batches of fixed size, until all are exhausted.
+
+The process of sending the peer underlays is rate limited for a more
+fair distribution of resources among consumers of the protocol.
+
+Hive protocol defines following streams:
+
+\begin{itemize}
+    \item ID: \texttt{/swarm/hive/1.1.0/peers}
+    \item Serialization: Varint delimited Protobuf
+\end{itemize}
+
+Message definitions:
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{syntax = }\StringTok{"proto3"}\NormalTok{;}
+
+\KeywordTok{package}\NormalTok{ hive;}
+
+\KeywordTok{message}\NormalTok{ Peers \{}
+    \KeywordTok{repeated}\NormalTok{ BzzAddress peers = }\DecValTok{1}\NormalTok{;}
+\NormalTok{\}}
+
+\KeywordTok{message}\NormalTok{ BzzAddress \{}
+    \DataTypeTok{bytes}\NormalTok{ Underlay = }\DecValTok{1}\NormalTok{;}
+    \DataTypeTok{bytes}\NormalTok{ Signature = }\DecValTok{2}\NormalTok{;}
+    \DataTypeTok{bytes}\NormalTok{ Overlay = }\DecValTok{3}\NormalTok{;}
+    \DataTypeTok{bytes}\NormalTok{ Nonce = }\DecValTok{4}\NormalTok{;}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+When nodes are connected, they can request peers for the appropriate
+proximity bin, in order to achieve optimal saturation. This can be done
+in the beginning and/or during the lifetime of the connection, if needed
+(ex. when saturation of the node changes for the particular bin). This
+is done by sending \texttt{Peers} message over the
+\texttt{/swarm/hive/1.1.0/peers} stream, and receiving the list of known
+peers from the \texttt{Peers} message in the response.
+
+During the lifetime of connection, nodes can broadcast newly found peers
+to their peers. This is done over \texttt{/swarm/hive/1.1.0/peers}
+notification by sending the \texttt{Peers} message with newly found or
+connected node.
+
+All new (not known) peers found in \texttt{Peers} message, received
+either way, should be automatically broadcasted to all subscribed peers,
+in the same way already explained above.
+%\subsection{Streams and messages \statusgreen}
+
+
+%The protocol specifies one stream with two messages:
+
+%\begin{definition}[Hive protocol messages]\label{def:hive-messages}
+%\begin{lstlisting}
+%// /swarm/hive/1.0.0/
+%syntax = "proto3";
+
+%package hive;
+
+%option go_package = "pb";
+
+%message Peers {
+%    repeated BzzAddress peers = 1;
+%}
+
+%message BzzAddress {
+%    bytes Underlay = 1;
+%    bytes Signature = 2;
+%    bytes Overlay = 3;
+%    bytes Nonce = 4;
+%}
+%\end{lstlisting}
+%\end{definition}
+
+%During the lifetime of connection, nodes can broadcast newly received peers to their peers. This is done by sending the \lstinline{Peers} message over the \\\lstinline{/swarm/hive/1.0.0/peers} stream.
+
+%Upon receiving a peers message, nodes are meant to store the peer information in their \gloss{address book}, i.e., a data structure containing info about peers known to the node. The address book is meant to be used to suggest peers  to a connectivity manager according to a connection strategy (\ref{spec:strategy:connection}) in order to bootstrap kademlia topology%
+% (\ref{sec:kademlia-connectivity})%
+%. The address book is meant to be persisted across sessions.
+
+%\subsubsection{Sending side}
+
+%A stream with the appropriate id is created and a \lstinline{Peers} message is sent over the stream. There is no response to this message. The sending node should wait for the receiving side to close its side of the stream, before closing the stream themselves and moving on.
+
+%\subsubsection{Receiving side}
+
+%When the stream is created, receiving node should wait for a \lstinline{Peers} message. After receiving the message, node should close its side of the stream to let the sender node know that the message was received, and move on with processing. If the new node was not known, it should also be forwarded to all connected peers closer to peer address then the node themselves.
+
+\subsubsection{Fetching peers using hive/peers stream}\label{fetching-peers-using-hivepeers-stream}
+
+This is a request/response style communication that is happening over the \texttt{/swarm/hive/1.1.0/peers} stream.
+On each request, new stream is created with the appropriate id, and after the response is received, stream should be closed by both side.
+
+\subsubsection{Requesting side}\label{requesting-side}
+
+Requesting node creates a stream and sends a \texttt{Peers} message,
+specifying the appropriate bin that it is interested in, and waits for
+the Peers message as response. The limit field can be used to limit the
+maximum number of peers in the response. The size \texttt{0} means that
+there is no limit. After the response is received, requesting node
+should close it's side of the stream, to let the other side know that
+response is read, and move on to processing the response. Each new peer
+(that is not previously known) received should be broadcasted to all
+subscribed peers.
+
+\subsubsection{Responding side}\label{responding-side}
+
+When the stream is created, responding node should wait for the
+\texttt{Peers} request from the requesting node, and send a
+\texttt{Peers} response, containing the appropriate Peers based on the
+request. After the response is sent, this node should wait for
+requesting node to close its side of the stream before closing the
+streaming and moving on.
+
+\subsubsection{Sending peers notification using hive/peers stream}\label{sending-peers-notification-using-hivepeers-stream}
+
+This is a notification style communication that is happening over the
+\texttt{/swarm/hive/1.1.0/peers} notification stream. On each newly
+found or connected peer, node should send info about this peer to all
+subscribed peers.
+
+\subsubsection{Sending side}\label{sending-side}
+
+Stream with appropriate ID is created and the \texttt{Peers} message is
+sent over the stream. There is no response to this message. The sending
+node should wait for the receiving side to close its side of the stream
+before closing the stream and moving on.
+
+\subsubsection{Receiving side}\label{receiving-side}
+
+When the stream is created, receiving node should wait for the
+\texttt{Peers} message. After receiving the message, node should close
+its side of the stream to let sender node that the message was received,
+and move on with processing. If the new node was not known, it should
+also be broadcasted to all subscribed peer. Nodes should keep track of
+peer info they already sent to other peers, or received it from, in
+order to avoid sending duplicate or even circular \texttt{Peers}
+notifications.

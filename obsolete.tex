@@ -1,0 +1,185 @@
+
+\begin{definition}[Participation SOC \statusorange]
+\label{def:psoc}
+Define participation SOC $\mathit{PSOC}(n, \langle sig, r\rangle)$ issued by uploader/batch owner $o$
+for receipt $r$ with signature $sig$ as the countersigned receipt.
+
+\begin{eqnarray}
+\mathit{PSOC} &:& \mathit{Nodes}\times\mathit{Receipts}_S\mapsto  \mathit{Chunks}\\
+\mathit{PSOC}(o, \langle sig, r\rangle)&\defeq&\mathit{SOC}(o,g,n\concat r)
+\end{eqnarray}
+where
+\begin{eqnarray}
+\textsc{Storer } n&=&\mathit{ECRecover}(sig,r)\\
+\textsc{Receipt } r&=& \langle a,g,t\rangle 
+\end{eqnarray}
+
+\end{definition}
+
+
+\begin{definition}[Nearest Chunk]
+\label{def:nearest}
+Define  $\mathit{Nearest}(n,p)$ as the chunk in the reserve of node $n$ nearest to pivot $p$ using XOR distance on the hash transform for $n$.%
+%
+\footnote{This can be implemented simply as an iterator start lookup if an index keyed by the hash transform is maintained.}
+
+\begin{eqnarray}
+\mathit{Nearest}&: &\mathit{Nodes}\times \mathit{uint256} \mapsto \mathit{Chunks}
+\\
+\mathit{Nearest}(n,p)&\defeq &\underset{c\in \mathit{Reserve}(n)}{\operatorname{arg\,max}}\mathit{PO}(p,\mathit{HT}(n,\mathit{Slot}(c)))
+\end{eqnarray}
+\end{definition}
+
+\begin{definition}[Density]
+\label{def:density}
+Define  $\mathit{Density}(n,p)$ as the proximity of the nearest chunk to pivot $p$ in the reserve of node $n$.
+
+\begin{eqnarray}
+\mathit{Density}&:& \mathit{Nodes}\times \mathit{uint256} \mapsto \mathit{uint8}
+\\
+\mathit{Density}(n,s)&\defeq& \mathit{PO}(p, \mathit{HT}(n,\mathit{Slot}(\mathit{Nearest}(n,p)))
+\end{eqnarray}
+
+
+\end{definition}
+
+
+\begin{definition}[Proof of Reserve Size]
+\label{def:densityproof}
+Define  $\mathit{PORS}(n,p)$, the proof of reserve size for node $n$ and pivot $p$ with the proofs or relevance and segment inclusion of the nearest chunk to $p$, given the hash transform for $n$.
+
+\begin{eqnarray}
+\Pi[\textsc{dens}]&:& \mathit{Nodes}\times \mathit{uint256} \mapsto \textsc{dens}\\
+\textsc{dens} &:=&\mathit{SIP}\times\mathit{Stamps}
+\\
+\mathit{PORS}(n,p)&\defeq&\langle e, s, sig\rangle
+\end{eqnarray}where\begin{eqnarray}
+c&=&\mathit{Nearest}(n,p)\\
+e&= &\mathit{SIP}(n,c,p \mod 128)\\
+s&=&\mathit{Stamp}(c)
+\end{eqnarray}
+\end{definition}            
+
+
+\begin{definition}[Proof of reserve size validity]
+\label{def:densityproof-validity}
+Define  $\mathit{Valid}(d,n,p)$, the validator of the proof of reserve size $d$ for the node $n$ and pivot $p$.
+
+\begin{eqnarray}
+\mathit{Valid}&:& 
+%\mathit{uint256}\times\mathit{SIP}\times\mathit{Stamps}\times
+\mathit{DENS}\times\mathit{Nodes}\times\mathit{uint256}\times\mathit{uint8}
+\mapsto \{0,1\}
+\\
+\mathit{Valid}(d,n,p,\varrho)&\Leftrightarrow&\\
+\textsc{authorised}&&\mathit{ECRecover}(sig,d,p)=n \wedge\\
+\textsc{preserved}&&\mathit{Valid}(a,p\mod 128,e) \wedge\\
+\textsc{relevant}&&\mathit{Valid}(s) \wedge\\
+\textsc{close}&&\mathit{PO}(\mathit{HT}(n, i), p)>\varrho
+\end{eqnarray}where\begin{eqnarray}
+d&=&\langle e, s\rangle\\
+i&=&\mathit{Slot}(s)\\
+a&=&\mathit{Address}(s)\\
+\varrho&\geq&\mathrm{ReserveRadius}
+\end{eqnarray}
+\end{definition}            
+
+
+The size of a sample drawn from a uniform distribution of chunks can be estimated using \emph{density probes}. A density probe for a pivot involves the storage node being able to prove possession of a witness chunk that is closest to the pivot using a node-specific but constant proximity metric.%
+%
+\footnote{The value of the density probe is the proximity order of the pivot and the hash of address and the node overlay. Using this constant transform, the witness chunk can easily be looked up if the node maintains an index but require a scan through the reserve chunks if not, thereby making it somewhat hard for other nodes to steal it.}
+%
+The estimated (base 2 log) reserve size is defined as the average of the density probe values over all tickets submitted in the claim.%
+%
+\footnote{Such averaging smooths out variance, so the fact that neighbourhoods need to collect several tickets comes in handy.}
+
+The expected reserve size, maintained as the average of a number of remembered proofs (\texttt{RETAINED\_DENSITIES\_COUNT}), serves as a baseline that the average value in the claim is compared to. Hitting this target will entitle the winning neighbourhood to be paid the maximum amount. 
+
+In the calculation of the number of storage slots, batches are assumed to be fully filled. 
+the storage rent for all valid batches  for the entire rental period since the last payout. The unit price of storage is read from the price oracle as a calibrated parameter measured in bzz per slot per block (\texttt{STORAGE\_RENT\_UNIT\_PRICE}). 
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Recency is defined on the timestamp of the receipt countersigned by the batch owner.%
+%
+\footnote{Using the timestamp within the postage stamp would exclude from the recent chunks those that use a preissued postage stamp and is therefore considered unsafe.}
+
+The push-sync protocol prescribes that when an uploader pushes a chunk to the network, a storer node within the neighbourhood that is closest to the chunk address acknowledges the storing of the chunk by responding with a
+
+\subsection{Timing of lottery draws}
+ 
+The number of RCs required in the winning chain is a calibrated parameter (\texttt{TICKET\_COUNT}).  The duration of one lottery round is a multiple of \texttt{TICKET\_PERIOD} blocks. In other words, every \texttt{TICKET\_COUNT} times \texttt{TICKET\_PERIOD} blocks, there is a draw. The lottery draw at block $t$ uses the blockhash to designate an anchor for the current lottery round which selects the winning neighbourhood. Whenever the neighbourhood designated as winner actually has a chain not shorter than \texttt{TICKET\_COUNT} tickets, it submits a claim. If the claim is successful and there is a payout, we say that the lottery concluded and a draw event is emitted by the contract. If no successful claim is submitted before the next draw, i.e., an application period of \texttt{TICKET\_PERIOD} blocks has elapsed without a valid claim, the lottery carries on and no funds are dispensed.
+
+Assuming that winning neighbourhoods are always motivated to submit their claim, the conclusion of a lottery round hinges on finding a number of tickets which in turn depends on the number of chunks stamped recently, i.e., the ingress rate. Due to a decrease in the ingress rate, winning neighbourhoods may not be able to collect sufficient number of tickets for long times. The estimated duration for a round of the lottery to conclude is \texttt{TICKET\_PERIOD} times \texttt{TICKET\_COUNT}. If the current lottery round reaches this duration without a successful entry, the required chain length decreases by one every \texttt{TICKET\_PERIOD} blocks. The moment the lottery concludes, \texttt{TICKET\_PERIOD} is recalculated (as lottery age divided by average winning chain length. 
+This scheme quickly adapts to a changing ingress rate even if it has large variance.
+
+\subsection{Payout and reserve size}
+
+Upon successful verification of the proofs included in the postage lottery claim, the postage contract pays out the reward for every winning ticket to the node that is closest to the chunk address among all nodes that had a submitted ticket in the chain.
+This makes it unimportant which node in the neighbourhood actually issued a receipt.
+
+\subsubsection{Reserve}
+
+To make sure that all relevant historical content is available, i.e., chunks that have a valid postage stamp are actually stored, nodes are required to attach 
+a \emph{proof of reserve}. Proving this involves first committing to a set of chunks and then reveal and prove the possession of a randomly chosen member of this set. In particular the chunks in the reserve are transformed every phase of the lottery epoch and the hashes of the transformed chunks are concatenated in a fixed order based on the original addresses. The concatenated hashes build up a Merkle structure using the swarm file hash construct to define a Merkle root hash. A node that has a winning ticket hashes this to its ticket fingerprint to result in the new chain head which they would broadcast to their peers.
+
+If a neighbourhood wins the claim they submit to the blockchain needs to contain random spot checks that the reserve commitment describes the same set of original chunks for all nodes submitting a ticket. 
+Since reserve membership is precise enough to be deterministic for each node and the neighbours had enough time to synchronise about this content, then it is realistic to expect that neighbours will agree on the reserve.  
+
+\begin{figure}[htbp]
+\label{fig:rc}
+  \centering
+    % \includegraphics[width=.5\textwidth]{fig/.pdf}
+  \caption{Reserve commitment}
+\end{figure}
+
+Assuming the same sequence, nodes are able to calculate the Merkle root based on their neighbours address and thereby verify their peer's reserve commitment. This prevents nodes from building on chain that is invalid. Using a  different transform 
+each phase prevents nodes that don't do storage to calculate the reserve commitment. Making it node specific makes the RC not stealable. Finally, requiring the underlying chunk set to be identical, makes the scheme resistant to hybrid attacks, where a malicious node colluding with a batch owner creates chunks at will to satisfy some condition.  
+
+\begin{figure}[htbp]
+\label{fig:sst}
+  \centering
+    % \includegraphics[width=.5\textwidth]{fig/.pdf}
+  \caption{Single segment transform}
+\end{figure}
+
+To prevent nodes in the neighbourhood from  conspiring to store fewer chunks than dictated by the batches under blockchain consensus, missing the target is penalised with exponential decay, i.e., the payout halves with each unit of missing volume.
+
+     
+\subsubsection{Relevance}
+              
+Storing a chunk is justified by some notion of \emph{relevance}.     A more generic notion of relevance include popularity. Popular chunks are stored in the node's local cache as long as the frequency of requests for them provides enough SWAP revenue. Now, generically, relevance of  a chunk for storage also include cases where the profitability is guaranteed by the valid postage stamp  witnessing the intention to preserve its content.
+
+
+When it comes to submitting the winning chain to the blockchain, each time a chunk is referenced as a witness to some condition, a valid postage stamp needs to be attached which serves as a \emph{proof of relevance} for the chunk. By verifying authenticity of the stamp we make sure that the chunk stored was indeed meant to be stored. By validating the per-chunk balance, one verifies that the batch used in the stamp is alive, i.e., storage rent can still be deduced from its balance. 
+
+Using proof of relevance, the system guards against a junk attack whereby storage volume is proved by content noone is interested in keeping, including automatically generated content which does not even need storage resources.
+
+\begin{figure}[htbp]
+  \centering
+    % \includegraphics[width=.5\textwidth]{fig/.pdf}
+  \caption{Postage stamp as proof of relevance} 
+\label{fig:postage-stamp-relevance}
+\end{figure}
+
+
+\subsubsection{Retention} 
+
+Proof of retention can be produced by any node that has the chunk data and serves to prove that the chunk data associated with the hash is preserved in full integrity. Application to win the lottery requires the proofs of retention to be attached with each ticket and each proof of reserve. Segment inclusion proofs of the BMT chunk hash are compact and therefore suitable to model proof of retention that is verified by smart contract. 
+
+
+\begin{figure}[htbp]
+  \centering
+    % \includegraphics[width=.5\textwidth]{fig/.pdf}
+  \caption{Segment inclusion proofs as proof of retention}
+\label{fig:sip}
+\end{figure}
+
+% In order to collect all tickets, nodes must be present for the entire period.
+% In order to provide a size proof, the best strategy is to keep all valid chunks.
+
+Segment inclusion proofs can be used directly for single segment transforms so they are part of proofs of reserve. 

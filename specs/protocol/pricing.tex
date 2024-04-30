@@ -1,0 +1,35 @@
+Pricing protocol is used to announce payment threshold values. Nodes
+keep a price table for prices of every proximity order for each peer.
+
+It defines the streams:
+\begin{itemize}
+    \item ID: \texttt{/swarm/pricing/1.0.0/pricing}
+    \item Serialization: Varint delimited Protobuf
+\end{itemize}
+
+Message definitions:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{syntax = }\StringTok{"proto3"}\NormalTok{;}
+
+\KeywordTok{package}\NormalTok{ pricing;}
+
+\KeywordTok{message}\NormalTok{ AnnouncePaymentThreshold \{}
+ \DataTypeTok{bytes}\NormalTok{ PaymentThreshold = }\DecValTok{1}\NormalTok{;}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Notifying side}\label{notifying-side}
+
+When there's a need to upgrade the payment threshold the peer opens a
+stream and sends out a \texttt{AnnouncePaymentThreshold} with the new
+value. It then closes the stream.
+
+\subsubsection{Receiving side}\label{receiving-side-1}
+
+The peer reads the message contents and stores the value locally against
+the notifying peer. If the value is below the minimum payment threshold
+the notifying peer is disconnected. After reading the message it closes
+the stream.

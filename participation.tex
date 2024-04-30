@@ -1,0 +1,94 @@
+
+\subsubsection{Participation}
+
+\begin{definition}[Push-sync request \statusgreen]
+\label{def:push-sync-request}
+Define  $\mathit{Request}(c,st)$ as the request  to instruct swarm to store chunk $c$ with postage stamp $st$ originating from requester $o=\mathrm{owner}(st)$. 
+
+\begin{eqnarray}
+\mathit{Requests}&\defeq&\mathit{Chunks}\times\mathit{Stamps}\\ 
+\langle c, st\rangle\in\mathit{Requests} \\
+&\Leftrightarrow&\\
+\text{chunk}&c&\text{chunk to be uploaded}\\
+\text{stamp}&st&\text{valid postage stamp}\\
+\text{originator } o&=&\mathrm{owner}(st)
+\end{eqnarray}
+% where\begin{eqnarray}
+% c&\defeq&
+% \end{eqnarray}
+\end{definition}
+
+\begin{definition}[Receipt \statusgreen]
+\label{def:receipt}
+Define  $\mathit{Receipt}(n,st)$ as the receipt issued by node $n$ on chunk request with stamp $st$.
+
+\begin{eqnarray}
+\mathit{Receipt}&:&\mathit{Nodes}\times\mathit{Stamps}\times\mapsto\mathit{Receipts}\\ 
+\mathit{Receipts} &\defeq&
+\mathit{Address}\times\mathit{Segment}\times\mathit{Nodes}\times\mathit{Timestamp}\\
+\mathit{Receipt}(n, st) &\defeq& \langle
+a, g, m, t \rangle
+\end{eqnarray}
+where
+\begin{eqnarray}
+\text{address } a&=&\mathit{Address}(st)\\
+\text{commit } g&=&\mathit{RCH}(n,k) \text{ for some }k\\
+\text{closest node } m&=&\operatorname{arg\,max}_{j\in\mathit{Neighbours}(n)}\mathit{PO}(a,j)\\
+\text{timestamp } t&=&\texttt{NOW} \text{-- time of issuing receipt}
+\end{eqnarray}
+and authenticated version (signed receipts):
+\begin{eqnarray}
+\mathit{Receipts}_S &\defeq&\mathit{Sig}\times\mathit{Receipts}
+ \end{eqnarray}
+
+\end{definition}
+
+\begin{definition}[Receipt validity \statusgreen]
+\label{def:receipt-validity}
+Define  $\mathit{Valid}[\textsc{\lowercase{REC}}](st,\langle sig,r\rangle)$ as the validator function for a signed receipt $\langle sig,r\rangle$ as response to a pushed chunk request with stamp $st$. Receipt validity check is performed by the request originator.
+
+\begin{eqnarray}
+\mathit{Valid}[\textsc{\lowercase{REC}}] &:&\mathit{Stamp}\times\mathit{Receipts}_S\mapsto\{\mathtt{T,F}\}\\
+\mathit{Valid}[\textsc{\lowercase{REC}}](st,\langle sig,\langle
+a, g, m, t \rangle\rangle)\\
+&\Leftrightarrow&\\
+\text{valid timestamp } &&\mathit{Time}(r)<t<\mathtt{NOW}\\
+\text{storer in neighbourhood} && \mathit{PO}(a,n)\geq \mathit{depth}\\
+\text{closest node is closer} && \mathit{PO}(a,m)\geq\mathit{PO}(a,n)
+\end{eqnarray}
+where
+\begin{eqnarray}
+a&=&\mathit{Address}(st)\\
+n&= &\mathit{ECRecover}(sig,r)
+\end{eqnarray}
+\end{definition}
+
+
+\begin{definition}[Proof of participation \statusgreen]
+\label{def:pop}
+Define  proof of participation $p=\Pi[\textsc{\lowercase{PART}}](n, st)$ for node $n$
+and chunk request $q=\langle c,st\rangle$ as the receipt issued by storer $n$ on request $q$ countersigned by the batch owner of stamp $st$.
+
+\begin{eqnarray}
+\Pi[\textsc{\lowercase{PART}}] &:& \mathit{Nodes}\times\mathit{Stamps}\mapsto \mathit{Receipts}_S\\
+\Pi[\textsc{\lowercase{PART}}](n,st) &\defeq&  \langle\mathit{Sig}(\mathrm{owner}(st),n\concat r), r\rangle
+\end{eqnarray}
+where
+\begin{eqnarray}
+r &=& \mathit{Receipt}(n, st)
+\end{eqnarray}
+\end{definition}
+
+
+\begin{definition}[Proof of participation validity \statusgreen]
+\label{def:pop-validity}
+Define $\mathit{Valid}[\textsc{\lowercase{PART}}](n,st,p)$ as the validator of a proof of participation $p$ for node $n$ with chunk at address $a$ and stamp $st$.
+\begin{eqnarray}
+\mathit{Valid}[\textsc{\lowercase{PART}}]  &:& \mathit{Nodes}\times\mathit{Stamp}\times\mathit{Part}\mapsto \{\mathtt{T,F}\}\\
+\mathit{Valid}[\textsc{\lowercase{PART}}](n,st,\langle sig, r\rangle)\\
+&\Leftrightarrow&\\
+\text{countersigned by owner} && \mathrm{owner}(st) = \mathit{ECRecover}(sig, n\concat r) \\
+\text{relevant chunk}&&\mathit{Valid}[\textsc{\lowercase{STAMP}}](st)\\   
+\text{receipt valid}&&\mathit{Valid}[\textsc{\lowercase{REC}}](st,r)
+\end{eqnarray}
+\end{definition}

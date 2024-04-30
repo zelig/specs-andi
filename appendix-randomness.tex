@@ -1,0 +1,52 @@
+\chapter{Source of randomness}\label{sec:randomness}
+
+As the \emph{neighbourhood selection anchor} will directly affect which neighbourhood wins the pot, it is prudent to derive the randomness from a source of entropy that cannot be manipulated. A common solution to obtain randomness is to have independent parties committing to a random nonce with a stake. The random seed for a round is defined as the xor of all revealed nonces. Given the nonces are independent sources fixed in the commit, no individual participant has the ability to skew randomness by selecting a particular nonce. Thanks to the commutativity of xor, the order of reveals is also irrelevant. However, if the reveal transactions are sequential, committers compete at holding out since the last one to reveal can effectively choose the resulting seed to be either including its committed nonce (if they do reveal) or not (if they do not reveal). The threat to slash the stake of non-revealers serves to eliminate this degree of freedom from last revealers and thus renders this scheme a secure random oracle assuming there is at least one honest (non-colluding) party.%
+%
+\footnote{If the stake is higher than the reward pot, one cannot  afford being slashed with even just one commit without a loss. If this cannot be guaranteed, slashing of the stake is not an effective deterrent.}
+
+Now note that the redistribution scheme already has a commit reveal scheme as well as stake slashed for non-revealers, so a potential random oracle is already part of the proposed scheme. Incidentally, the beginning of the claim phase is when new randomness is needed to select the truth and a winner. Importantly, these random values are only needed if there is a claim which implies that there were some commits and reveals to choose from. Or conversely, if there are no reveals in the round,%
+%
+\footnote{If saboteurs get slashed or frozen in the claim transaction, if there is no claim, the committers get away without being punished. This can be remedied if the staking contract keeps a flag on each overlay (set when commits, unsets when reveals in the same round) and the check and punishment happens as a result of a commit call in the case the flag is found set.}
+%
+the random seed is undefined but is also not needed for the claim.
+
+The random seed that transpires at the beginning of the claim phase can serve as the \emph{reserve sample salt} (nonce input to modified hash used in the sampling) with which the nodes in the selected neighbourhood can start calculating their reserve sample. 
+
+The neighbourhood for the next round is selected by the \emph{neighbourhood selection anchor}, which is, similarly to the truth and winner selection nonces, deterministically derived from the same random seed. Unlike the nonces used to select from the reveals, neighbourhood selection should be well defined for the following round even if a round is skipped, i.e., when there is no reveals. To cover this case skipped rounds keep the random seed of the previous round. However, in order to rotate selected neighbourhoods through skipped rounds, we derive the neighbourhood selection anchor from the seed by factoring in the  number of game rounds passed since the last reveal.%
+%
+\footnote{Otherwise a selected neighbourhood could collude maliciously not to commit/reveal and have the pot roll over to the following round. By simply holding out for a number of redistribution rounds, they could unfairly multiply their reward when they eventually claim the pot.}
+%
+% See figure \ref{fig:randomness}.
+
+% \begin{figure}[htbp]
+%   \centering
+%     % \includegraphics[width=.5\textwidth]{fig/randomness.pdf}
+%   \caption[Entropy source of random seed and deriving random nonces]{Entropy source of random seed and deriving random nonces.}
+% \label{fig:randomness}
+% \end{figure}
+
+
+In order to provide protection against the case when each committer in the neighbourhood is colluding, and can afford losing stake we need to make sure that the entropy is still high otherwise the nodes can influence the neighbourhood selection nonce and reselect themselves or a fixed colluding neighbourhood (or increase the chances of reselection).%
+%
+
+
+\begin{definition}[Random seed for the round\statusgreen]
+\label{def:random-seed}
+%
+Define the random seed of the round as the xor of all obfuscation keys sent as part of the reveal transaction data during the entire reveal period:
+%
+\begin{eqnarray}
+\mathcal{R}&:&\Gamma\mapsto\mathit{Nonce}\\
+\mathcal{R}(\gamma)&\defeq\ &\begin{cases}\mathcal{R}(\mathit{Prev}(\gamma))  &\text{ if }  \lvert\mathit{Reveals}(\gamma)\rvert=0\\
+\Xor_{r\in\mathit{Reveals}(\gamma)}\textsc{nonce}(r) &\text{ otherwise }
+\end{cases}
+\end{eqnarray}
+\end{definition}
+
+\begin{lemma}[Round seed is a secure random oracle]
+The nonce produced by xoring the revealed obfuscation keys is a correct source of entropy.
+%
+\begin{proof}
+Assuming $n$ independent parties committing, choosing any particular nonce will leave the outcome fully random.
+\end{proof}
+\end{lemma}     

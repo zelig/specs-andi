@@ -1,0 +1,240 @@
+        
+Pullsync is a subscription style protocol used to synchronize the chunks
+between neighborhood nodes. It bootstraps new nodes by filling up their
+storage with the chunks in range of their storage radius and also
+ensures eventual consistency - by making sure that the chunks will
+gradually migrate to their storer nodes.
+
+Pullsync is done in parallel using multiple workers, one for each unique
+pair of peer/binID.
+
+The chunks are served in batches (ordered by timestamp) and they cover
+contiguous ranges.
+
+During pullsyncing the same chunk can be received multiple times if it has 
+been stamped multiple times with different postage stamps.
+The pulling side must store it accordingly.
+
+The downstream peers coordinate their syncing by requesting ranges from
+the upstream with the help of the ``interval store'' - to keep track of
+which ranges are left to be synchronized.
+
+Because live syncing happens in sessions - it is inevitable that after a
+session is completed - the downstream peer disconnects and will be
+missing chunks that arrive later (after disconnect).
+
+For this purpose the downstream peer will make a note about the
+timestamp of the last synced chunk on disconnect.
+
+The point of the interval based approach is to cover those gaps that
+inevitably arise in between syncing sessions.
+
+To save bandwidth, before the contents of the chunk is being sent over
+the wire, the upstream will sent a range of chunk addresses for
+approval. If the downstream decides that some (or all) addresses are
+desired - a confirmation message is sent to the upstream, to which it
+responds with the chunks mentioned in the request.
+
+Pullsync protocol defines following streams:
+\begin{itemize}
+    \item ID: \texttt{/swarm/pullsync/1.3.0/pullsync}
+    \item ID: \texttt{/swarm/pullsync/1.3.0/cursors}
+    \item Serialization: Varint delimited Protobuf
+\end{itemize}
+
+Message definitions:
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{syntax = }\StringTok{"proto3"}\NormalTok{;}
+
+\KeywordTok{package}\NormalTok{ pullsync;}
+
+\KeywordTok{message}\NormalTok{ Syn \{\}}
+
+\KeywordTok{message}\NormalTok{ Ack \{}
+  \KeywordTok{repeated} \DataTypeTok{uint64}\NormalTok{ Cursors = }\DecValTok{1}\NormalTok{;}
+  \DataTypeTok{uint64}\NormalTok{ Epoch = }\DecValTok{2}\NormalTok{;}
+\NormalTok{\}}
+
+\KeywordTok{message}\NormalTok{ Get \{}
+  \DataTypeTok{int32}\NormalTok{ Bin = }\DecValTok{1}\NormalTok{;}
+  \DataTypeTok{uint64}\NormalTok{ Start = }\DecValTok{2}\NormalTok{;}
+\NormalTok{\}}
+
+\KeywordTok{message}\NormalTok{ Chunk \{}
+  \DataTypeTok{bytes}\NormalTok{ Address = }\DecValTok{1}\NormalTok{;}
+  \DataTypeTok{bytes}\NormalTok{ BatchID = }\DecValTok{2}\NormalTok{;}
+\NormalTok{\}}
+
+\KeywordTok{message}\NormalTok{ Offer \{}
+  \DataTypeTok{uint64}\NormalTok{ Topmost = }\DecValTok{1}\NormalTok{;}
+  \KeywordTok{repeated}\NormalTok{ Chunk Chunks = }\DecValTok{2}\NormalTok{;}
+\NormalTok{\}}
+
+\KeywordTok{message}\NormalTok{ Want \{}
+  \DataTypeTok{bytes}\NormalTok{ BitVector = }\DecValTok{1}\NormalTok{;}
+\NormalTok{\}}
+
+\KeywordTok{message}\NormalTok{ Delivery \{}
+  \DataTypeTok{bytes}\NormalTok{ Address = }\DecValTok{1}\NormalTok{;}
+  \DataTypeTok{bytes}\NormalTok{ Data = }\DecValTok{2}\NormalTok{;}
+  \DataTypeTok{bytes}\NormalTok{ Stamp = }\DecValTok{3}\NormalTok{;}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Getting cursors}\label{getting-cursors}
+
+Initially it will request the cursors from the upstream by opening up a
+new \texttt{/swarm/pullsync/1.3.0/cursors} stream and sending a \texttt{Syn} message that includes a epoch timestamp. The expected response is the \texttt{Ack} message containing a collection of \texttt{int64} representing the cursor. The stream is closed on the requesting side.
+
+To sync an interval the requesting peer sends a \texttt{Get} message to the upstream, message containing the bin ID and the starting position.
+
+\subsubsection{Requesting the data}\label{requesting-the-data}
+
+In response a \texttt{Offer} message is returned where the topmost index and a list of chunk addresses.
+
+After inspecting the chunk addresses we issue a \texttt{Want} message
+with the addresses we're interested in fetching. The upstream responds
+with a series of \texttt{Deliver} messages containing the chunk data
+with their associated stamps. Once all requested chunks have been
+delivered the upstream will close the stream.
+
+\subsubsection{Error handling}\label{error-handling}
+
+If the upstream times out, returns an error or closes the stream unexpectedly it will be rescheduled to be synced at a later point in time.
+
+During the first time we get the cursor from a new peer its 'epoch timestamp' will be persisted against the peer address.
+Epoch timestamp acts as the unique fingerprint of the peer's reserve. If the reserve is wiped out this will generate a new 'epoch timestamp'.
+In this way changes in epoch timestamp triggers a reset of the stored intervals for the given peer - forcing the pulling peer to start pullsync from scratch.
+
+Also changes in Kademlia topology triggers a restart of pullsync - and if no changes happen in the span of a configurable amount of time (in Swarm it's 5 minutes) the pullsyncing will be restarted automatically by the scheduler after timeout.
+
+If during pullsync an invalid chunk is received the upstream is blocklisted immediately.
+
+\subsubsection{Bootstrapping a node}\label{bootstrapping-a-node}
+
+A fresh node starts from the lowest bin ID which corresponds to the
+oldest chunks. Once done, the node continue with live syncing.
+
+Live syncing implies that we've exhausted syncing from all lower bin IDs
+and reached a bin ID which does not have a chunk.
+
+Interval store is a component that stores a list of intervals (start,
+end) with the last synced bin ID. Its purpose is to provide methods to
+\texttt{add} new intervals and retrieve missing intervals that need to
+be added.
+
+It may be used in synchronization of streaming data to persist retrieved
+data ranges between sessions. There's a `merge' functionality but is
+currently unused. In addition there is a `last' method that returns the
+value that is at the end of the last interval.
+
+Most important is the `Next' method that returns the first range
+interval that is not fulfilled. Returned start and end values are both
+inclusive, meaning that the whole range including start and end need to
+be added in order to fill the gap in intervals.
+
+Returned value for end is \texttt{0} if the next interval is after the
+whole range that is stored in Intervals. Zero end value represents no
+limit on the next interval length.
+
+Returned empty boolean indicates if both start and end values have
+reached the ceiling value which means that the returned range is empty,
+not containing a single element.
+
+Puller uses the storage radius as the indicator of the neighborhood,
+thus limiting the number of peers should be pulled from.
+
+When syncing - we start at storage radius up to 31 (from the
+neighborhood).
+
+For non-neighbours you only sync the bin that your peer is from (its
+equivalent).
+
+This is only a safety mechanism that ensures that lost chunks are being
+eventually pull-synced to their destination by pulling from nodes that
+are in bins under the storage radius.
+
+% \subsection{ \statusorange} Incentivisation strategy
+
+%\section{ \statusorange} Pullsync
+
+%While the other described protocols are request scoped, Pullsync is a %
+%subscription stype protocol.
+
+%It's worth mentioning that the chunks that are being syncronized between nodes always travel alongside their corresponding postage stamps.
+
+%Pullsync's role is to help syncronization of the chunks between neighborhood nodes. It bootstraps new nodes by filling up their storage with the chunks in range of their storage radius and also ensures eventual consistency - by making sure that the chunks will gradually migrate to their storer nodes.
+
+%There are two kinds of syncing:
+
+%- historical syncing: catching up with content that arrived to relevant neighborhood before this session started (after an outage or for completely new nodes).
+%- live syncing: fetching the chunks that are received after the session has started.
+
+%The chunks are served in batches (ordered by timestamp) and they cover contiguous ranges.
+
+%The downstream peers coordinate their syncing by requesting ranges from the upstream with the help of the "interval store" - to keep track of which ranges are left to be syncronized.
+
+%Because live syncing happens in sessions - it is inevitable that after a session is completed - the downstream peer disconnects and will be missing chunks that arrive later.
+
+%For this purpose the downstream peer will make a note about the timestamp of the last synced chunk on disconnect.
+
+%The point of the interval based approach is to cover those gaps that inevitably arise in between syncing sessions.
+
+%To save bandwidth, before the contents of the chunk is being sent over the wire, the upstream will sent a range of chunk addresses for approval. If the downstream decides that some (or all) addresses are desired - a confirmation message is sent to the upstream, to which it responds with the chunks mentioned in the request.
+
+%```mermaid
+%sequenceDiagram
+%    Downstream->>+Upstream: Get
+%    Upstream-->>-Downstream: Offer address range
+%    Downstream->>+Upstream: Want address range
+%    Upstream-->>-Downstream: Delivery
+%```
+
+
+%\begin{definition}[Pull-sync protocol messages]\label{def:pull-sync-messages}
+
+%\begin{lstlisting}[]
+%// /swarm/pull-sync/1.0.0/
+%// Copyright 2020 The Swarm Authors. All rights reserved.
+%// Use of this source code is governed by a BSD-style
+%// license that can be found in the LICENSE file.
+
+%syntax = "proto3";
+
+%package pullsync;
+
+%option go_package = "pb";
+
+%message Syn {}
+
+%message Ack {
+%  repeated uint64 Cursors = 1;
+%}
+
+%message Get {
+%  int32 Bin = 1;
+%  uint64 Start = 2;
+%}
+
+%message Chunk {
+%  bytes Address = 1;
+%  bytes BatchID = 2;
+%}
+
+%message Offer {
+%  uint64 Topmost = 1;
+%  repeated Chunk Chunks = 2;
+%}
+
+%message Want {
+%  bytes BitVector = 1;
+%}
+
+%message Delivery {
+%  bytes Address = 1;
+%  bytes Data = 2;
+%  bytes Stamp = 3;
+%}\end{lstlisting}
+%\end{definition}

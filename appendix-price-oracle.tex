@@ -1,0 +1,27 @@
+\chapter{Price oracle}
+\label{sec:appendix-price-oracle}
+
+The price oracle smart contract receives input from the  redistribution game. Notably the input constitutes information on storage supply relative to the current demand. Since demand is maxed out with storage depth, this information is simply captured by the number of honest revealers per neighbourhood. Rounds when there are no revealers should be treated as rounds where the number of revealers is zero therefore the number of skipped rounds is passed to the price update function too.
+
+\begin{definition}[price function \statusgreen]
+\label{def:price-update-function}
+The $\mathit{Price}$ function determines the unit price of storage (PLUR/chunk/block). It is defined in such a way that the ratio between the price of rent in consecutive rounds is an exponential function of supply. Supply is the deviation from the optimal number of peers in a neighbourhood as measured by the number of honest revealers in the previous round. 
+\begin{eqnarray}
+\mathit{Price}&:&\Gamma\mapsto\mathit{uint256}\\
+\mathit{Price}(\gamma) &\defeq&\mathit{Price}(\mathit{Prev}(\gamma))\cdot 2^{\sigma\cdot d}
+\end{eqnarray}
+where
+\begin{eqnarray}
+\textsc{supply} && d = \texttt{NHOOD\_PEER\_COUNT}-\lvert\mathit{Reveals}(\gamma)\rvert\\
+\textsc{reactivity} && \sigma = \frac{1}{\texttt{PRICE\_2X\_ROUNDS}}
+\end{eqnarray}
+First, note that for a consistent deviation signal $d$, the price change after $n$ rounds is given by multiplying the starting price with $\left(2^{\sigma\cdot d}\right)^n$. The price has doubled if this expression is $2$, i.e., $n\cdot d\cdot \sigma =1$.  
+With the lowest signal of undersupply ($r=3$), $d=1$, and therefore the reactivity parameter is expressed as $\sigma=\frac{1}{n}$. In other words $\frac{1}{\sigma}$ measures the number of rounds it takes for the price to double.
+\end{definition}
+
+
+% The price oracle simply applies a price update function which calculates the price of the new round by multiplying the previous rounds's price with the \emph{price update coefficient}. 
+
+% \begin{definition}[price update coefficient \statusgreen]
+% \label{def:price-update-coefficient}
+% \end{definition}

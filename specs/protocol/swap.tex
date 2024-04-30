@@ -1,0 +1,40 @@
+The purpose of the settlement protocol is to exchange payments with
+other peers.
+
+Settlement protocol defines the following streams:
+\begin{itemize}
+    \item ID: \texttt{/swarm/pseudosettle/1.0.0/pseudosettle}
+    \item Serialization: Varint delimited Protobuf
+\end{itemize}
+
+Message definitions:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{syntax = }\StringTok{"proto3"}\NormalTok{;}
+
+\KeywordTok{package}\NormalTok{ pseudosettle;}
+
+\KeywordTok{message}\NormalTok{ Payment \{}
+  \DataTypeTok{bytes}\NormalTok{ Amount = }\DecValTok{1}\NormalTok{;}
+\NormalTok{\}}
+
+\KeywordTok{message}\NormalTok{ PaymentAck \{}
+  \DataTypeTok{bytes}\NormalTok{ Amount = }\DecValTok{1}\NormalTok{;}
+  \DataTypeTok{int64}\NormalTok{ Timestamp = }\DecValTok{2}\NormalTok{;}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Paying side}\label{paying-side}
+
+Paying side opens a stream to the peer it wants to send the payment and issues a \texttt{Payment} message. It then waits for the accepting side to respond and close the stream.
+
+\subsubsection{Accepting side}\label{accepting-side}
+
+Reads the \texttt{Payment} message and after processing it returns a \texttt{PaymentAck} message containing the timestamp and outstanding debt for the paying side. It then closes the stream (or resets it - if any error has occurred).
+
+\subsubsection{Blocklisting}\label{caching}
+
+Blocklisting is the act of banning a certain peer from further interacting with us. It can be a temporary - for example due to accounting reasons, or permanent - for reasons such as returning an invalid chunk. Blocklisting a peer implies terminating any connections and disconnecting from it. A blocklisted peer will be immediately disconnected if it attempts to re-connect in the future.
+Blocklisting will happen automatically if a peer sends an invalid request based on the receiver's mode of operation, for example sending a pullsync request to a boot node.

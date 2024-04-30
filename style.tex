@@ -1,0 +1,230 @@
+\documentclass[a4paper,12pt,openany,hyperfootnotes,hidelinks]{scrbook}
+\usepackage[utf8]{inputenc}
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\PassOptionsToPackage{dvipsnames,svgnames,x11names}{xcolor}
+\usepackage[titletoc,title]{appendix}
+\usepackage[linedheaders,parts,pdfspacing,manychapters]{classicthesis}
+\usepackage[]{fullpage}
+% \usepackage[standardsections]{scrhack} % https://tex.stackexchange.com/questions/511049/conflict-between-titlesec-package-and-scrbook-class-after-most-recent-update-of
+\usepackage[section=chapter,numberedsection,acronym,toc, nonumberlist,index]{glossaries}
+\usepackage[stylemods=bookindex,abbreviations]{glossaries-extra} % index style
+%
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{amssymb}
+\usepackage{style/rest-api}
+\usepackage{style/lst}
+\usepackage{verbatim}
+\usepackage{enumitem}
+\setlist{noitemsep}
+% \setlist[1]{labelindent=\parindent} % < Usually a good idea
+\setlist[itemize]{label={---}}
+\usepackage{multirow}
+\usepackage{epigraph} % quotations (at start of chapter)
+\usepackage{csquotes}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,fit,positioning,shapes}
+% 
+\setcounter{tocdepth}{2}
+%
+\let\headheight=\baselineskip
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{\baselineskip}
+\interfootnotelinepenalty=10000 %% Completely prevent breaking of footnotes
+%
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% centered verbatim command
+\usepackage{varwidth}
+\newenvironment{centerverbatim}{%
+  \par
+  \centering
+  \varwidth{\linewidth}%
+  \verbatim
+}{%
+  \endverbatim
+  \endvarwidth
+  \par
+}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% make first use \emph
+% see: https://tex.stackexchange.com/questions/449104/how-to-style-first-acronym-and-first-glossary-appearance
+\newcommand{\firstuseformat}[1]{\emph{#1}}
+%
+\renewcommand{\glslinkpresetkeys}{% requires v1.26+
+  \ifglsused{\glslabel}%
+  {\letcs\glstextformat{@firstofone}}%
+  {\let\glstextformat\firstuseformat}%
+}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% make only the first mention of a term in a chapter hyperlinked
+% see: https://tex.stackexchange.com/questions/404051/glossaries-hyperlink-only-at-the-first-occurrence-in-every-chapter
+\GlsXtrEnableLinkCounting[section]{general,acronym,abbreviation}
+%
+% disable hyperlink if link count is greater than 1:
+\renewcommand*{\glslinkpresetkeys}{%
+ \ifnum\GlsXtrLinkCounterValue{\glslabel}>1
+  \setkeys{glslink}{hyper=false}%
+ \fi
+}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% \bibliographystyle{apalike}
+\setabbreviationstyle{short-em-nolong} % abbreviation / acronym should be just short form and emphasis = short-em-nolong
+\input{glossary.tex}
+\input{acronyms.tex}
+%
+\newcommand\gloss[1]{\gls{#1}} %singular
+\newcommand\glossupper[1]{\Gls{#1}} %singular uppercase
+\newcommand\glossplural[1]{\glspl{#1}} % plural
+\newcommand\glossupperplural[1]{\Glspl{#1}} % plural uppercase
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% make condition to render text based on it
+%%% following example here: https://tex.stackexchange.com/questions/16711/minimal-option-for-cv/21642#21642
+\newif\ifdraft
+\drafttrue % Uncomment to compile whole draft document / comment to compile only finished sections.
+\ifdraft
+\else 
+\fi
+\newif\iftodo
+% \todotrue % Uncomment to compile whole draft document / comment to compile only finished sections.
+\iftodo
+\else 
+\fi
+%%%
+%
+% make page number a link to jump to toc only in draft mode
+\ifdraft
+\renewcommand\pagemark{{%
+  \usekomafont{pagenumber} \hyperref[sec:toc]{\thepage}
+}}
+\fi
+% Statuses only shown in draft mode
+\newcommand\wip[1]{
+\iftodo \todo[inline,size=\Large]{work in progress: #1}\fi }
+\newcommand\orange[1]{
+\iftodo \todo[inline,size=\Large]{work in progress: #1}\fi}
+\newcommand\green[1]{
+\iftodo \todo[inline,size=\Large,backgroundcolor=green]{complete }\fi}
+\newcommand\yellow[1]{
+\iftodo \todo[inline,size=\Large,backgroundcolor=yellow]{incomplete:  #1}\fi}
+\newcommand\red[1]{
+\iftodo \todo[inline,size=\Large,backgroundcolor=red]{incomplete}\fi}
+% \newcommand\red[1]{
+% \todo[inline,size=\Large,backgroundcolor=red]{incomplete}}
+%
+% statuses in section names
+% for error explanation see: https://tex.stackexchange.com/questions/64298/error-with-xcolor-package
+\usepackage{xcolor}
+\colorlet{GREEN}{green}
+\colorlet{ORANGE}{orange}
+\colorlet{RED}{red}
+% none of these work
+% \ifdraft
+% \usepackage{bbding}
+% \usepackage{pifont}
+% \newcommand{\cmark}{\ding{51}}%
+% \newcommand{\xmark}{\ding{55}}%
+% \usepackage{unicode-math}
+% \newcommand{\cmark}{\setmainfont{Linux Libertine O}\symbol{"2714}\par}
+% \newcommand{\xmark}{\setmainfont{Linux Libertine O}\symbol{"2718}\par}
+% \usepackage{fontawesome}
+% \def\cmark{\FA\symbol{"F00C}}
+% \def\xmark{\FA\symbol{"F00D}}
+% \fi
+% \newcommand{\cmark}{${\checkmark}$}
+% \newcommand{\xmark}{${\times}$}%'
+\newcommand{\cmark}{***}
+\newcommand{\xmark}{xxx}
+\newcommand\statusgreen{\ifdraft \textcolor{green}{\cmark}\fi} 
+\newcommand\statusyellow{\ifdraft \textcolor{green}{?}\fi} 
+\newcommand\statusorange{\ifdraft \textcolor{orange}{WIP}\fi} 
+\newcommand\statusred{\ifdraft \textcolor{red}{\xmark}\fi} 
+% \newcommand\statusred{ \textcolor{red}{\xmark}} 
+\newcommand\statuspriority{\ifdraft \textcolor{blue}{PRIORITY}\fi}
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newcommand\PO{\mathit{PO}}
+\newcommand\Keys{\mathcal{K}}
+\newcommand\nil{\varnothing}
+\newcommand\defeq{\overset{\textrm{\tiny def}}{=}}
+\newcommand\Xor{\underset{\textbf{\Large--}}{\bigvee}}
+\providecommand{\xor}{\veebar}
+\newcommand{\validator}[1]{\mathbb{V}^{\textsc{#1}}}
+\newcommand{\proofof}[1]{\Pi^{\textsc{#1}}}\newcommand{\idx}[1]{\texttt{[}\/#1\/\texttt{]}}
+\DeclareMathOperator{\concat}{\operatorname{\oplus}}
+\DeclareMathOperator{\Concat}{\operatornamewithlimits{\bigoplus}}
+\DeclareMathOperator{\rangedel}{:}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage{thmtools}
+\makeatletter
+\def\ll@definition{%
+  \protect\numberline{\csname the\thmt@envname\endcsname}%
+  \ifx\@empty\thmt@shortoptarg
+    \thmt@thmname
+  \else
+    \thmt@shortoptarg
+  \fi}
+\def\l@thmt@definition{} 
+\makeatother
+\declaretheoremstyle[
+spaceabove=8pt, spacebelow=8pt,headfont=\normalfont\bfseries,headpunct={.\\},notefont=\bfseries, notebraces={ -- }{},bodyfont=\normalfont,postheadspace=4pt,qed={}]{theorem}
+% \newtheorem{definition}{Definition}
+% \newtheorem{corollary}[definition]{Corollary}
+% \newtheorem{theorem}[definition]{Theorem}
+% \newtheorem{lemma}[definition]{Lemma}
+
+\declaretheorem[style=theorem]{theorem}
+\declaretheorem[style=theorem,sibling=theorem]{definition}
+\declaretheorem[style=theorem,sibling=theorem]{corollary}
+\declaretheorem[style=theorem,sibling=theorem]{lemma}%
+\renewcommand{\listtheoremname}{List of definitions}
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\usepackage{fancyvrb}
+\newcommand{\VerbBar}{|}
+\newcommand{\VERB}{\Verb[commandchars=\\\{\}]}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
+% Add ',fontsize=\small' for more characters per line
+\newenvironment{Shaded}{}{}
+\newcommand{\AlertTok}[1]{\textcolor[rgb]{1.00,0.00,0.00}{\textbf{#1}}}
+\newcommand{\AnnotationTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\AttributeTok}[1]{\textcolor[rgb]{0.49,0.56,0.16}{#1}}
+\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
+\newcommand{\BuiltInTok}[1]{#1}
+\newcommand{\CharTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textit{#1}}}
+\newcommand{\CommentVarTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\ConstantTok}[1]{\textcolor[rgb]{0.53,0.00,0.00}{#1}}
+\newcommand{\ControlFlowTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{\textbf{#1}}}
+\newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.56,0.13,0.00}{#1}}
+\newcommand{\DecValTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
+\newcommand{\DocumentationTok}[1]{\textcolor[rgb]{0.73,0.13,0.13}{\textit{#1}}}
+\newcommand{\ErrorTok}[1]{\textcolor[rgb]{1.00,0.00,0.00}{\textbf{#1}}}
+\newcommand{\ExtensionTok}[1]{#1}
+\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
+\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.02,0.16,0.49}{#1}}
+\newcommand{\ImportTok}[1]{#1}
+\newcommand{\InformationTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{\textbf{#1}}}
+\newcommand{\NormalTok}[1]{#1}
+\newcommand{\OperatorTok}[1]{\textcolor[rgb]{0.40,0.40,0.40}{#1}}
+\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{#1}}
+\newcommand{\PreprocessorTok}[1]{\textcolor[rgb]{0.74,0.48,0.00}{#1}}
+\newcommand{\RegionMarkerTok}[1]{#1}
+\newcommand{\SpecialCharTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\SpecialStringTok}[1]{\textcolor[rgb]{0.73,0.40,0.53}{#1}}
+\newcommand{\StringTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\VariableTok}[1]{\textcolor[rgb]{0.10,0.09,0.49}{#1}}
+\newcommand{\VerbatimStringTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\WarningTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+%
+\makeatletter % legacy /sc command support
+%\DeclareOldFontCommand{\rm}{\normalfont\rmfamily}{\mathrm}
+%\DeclareOldFontCommand{\sf}{\normalfont\sffamily}{\mathsf}
+%\DeclareOldFontCommand{\tt}{\normalfont\ttfamily}{\mathtt}
+%\DeclareOldFontCommand{\bf}{\normalfont\bfseries}{\mathbf}
+%\DeclareOldFontCommand{\it}{\normalfont\itshape}{\mathit}
+%\DeclareOldFontCommand{\sl}{\normalfont\slshape}{\@nomath\sl}
+\DeclareOldFontCommand{\sc}{\normalfont\scshape}{\@nomath\sc}
+\makeatother

@@ -1,0 +1,12 @@
+Nodes can choose to store chunks that do not fall under area of responsibility in the event that the chunk belongs to some popular content. Additionally, during storage radius changes, the chunks evicted from the reserve are transferred into the cache. In Swarm the cache is a configurable parameter, individual peers can tune it to their needs. A larger cache size has the benefit of generating more revenue since the peer does not need to request the chunk from the network and avoids paying the fee for such action.
+
+\subsubsection{Garbage collection}\label{garbage-collection}
+
+Chunks leaves the reserve for two reasons, in both cases the chunk will go to cache after eviction:
+\begin{itemize}
+\tightlist
+\item
+  Expired postage stamp batch. Note: multiple batches can be associated with a single chunk.
+\item
+  Reserve is full - we start evicting chunks (from the lowest value batch) starting from current radius and until the reserve size is below the capacity.
+\end{itemize}

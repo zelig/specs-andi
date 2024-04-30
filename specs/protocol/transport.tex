@@ -1,0 +1,87 @@
+Swarm is a network operated by its users. Each node in the network is supposed to run a client complying with the protocol specifications. On the lowest level, the nodes in the network connect using a peer-to-peer network protocol as their transport layer. This is called the \gloss{underlay network}. 
+In its overall design, Swarm is agnostic of the particular underlay transport used as long as it satisfies the following requirements.
+
+\subsubsection{Underlay network \statusyellow}\label{sec:underlay-transport} 
+
+The libp2p networking stack provides all the required properties for the underlay network.
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item \emph{Addressing} is provided in a form of multi address for every node, which is referred here as the underlay address. Every node can have multiple underlay addresses depending on transports and network listening addresses that are configured.
+\item \emph{Dialing} is provided over libp2p supported network transports.
+\item \emph{Listening} is provided by libp2p supported network transports.
+\item \emph{Live connections} are established between two peers and kept open for accepting or sending messages.
+\item \emph{Channel security} is provided with TLS and libp2p \texttt{secio} stream security transport.
+\item \emph{Protocol multiplexing} is provided by libp2p \texttt{mplex} stream Multiplexer protocol.
+\item \emph{Delivery guarantees} are provided by using libp2p bidirectional streams to validate the response from the peer on sent message.
+\item \emph{Serialization} is not enforced by libp2p, as it provides byte streams allowing flexibility for every protocol to choose the most appropriate serialization.
+\end{enumerate}
+
+The underlaying transport layer that is used by all protocols is based on libp2p. This chapter only contains the information that is required to be taken into account by any client that intends to connect to the swarm network.
+
+libp2p uses cryptographic key pairs to sign messages and derive unique peer identities (or ``peer ids'').
+
+Although private keys are not transmitted over the wire, the serialization format used to store keys on disk is also included as a reference for libp2p implementors who would like to import existing libp2p key pairs.
+
+Although RSA and Ed25519 should work fine - Swarm uses ECDSA secp256R1 and this standard is required by any alternative client that wants to connect to swarm.
+
+Key encodings and message signing semantics are covered on this \href{https://github.com/libp2p/specs/blob/master/peer-ids/peer-ids.md\#keys}{link}.
+
+Note that \texttt{PrivateKey} messages are never transmitted over the wire. Current libp2p implementations store private keys on disk as a serialized \texttt{PrivateKey} protobuf message. libp2p implementors who want to load existing keys can use the \texttt{PrivateKey} message
+definition to deserialize private key files.
+
+In Swarm, the key value stored in the file is encrypted using a password.
+
+\subsubsection{What are keys used? \statusyellow}\label{sec:underlay-transport} 
+
+Keys are used in two places in libp2p. The first is for signing messages and the second is for generating peer ids.
+
+\subsubsection{Addressing \statusyellow}\label{sec:underlay-transport} 
+
+Once generated the keys should be persisted to avoid them getting re-generated ``on-the-fly'' and generating unnecessary churn in the network.
+
+More detailed information on how nodes address each other in swarm can be found in the official \href{https://docs.libp2p.io/}{libp2p documentation}, specifically about \href{https://github.com/libp2p/specs/blob/master/peer-ids/peer-ids.md\#peer-ids}{peer ids format} and \href{https://github.com/libp2p/specs/tree/master/addressing}{addressing}
+
+\subsubsection{Connecting to the swarm network using \lstinline{dnsaddr} links}\label{sec:dnsaddr} 
+
+Swarm supports the \texttt{dnsaddr} format (example:
+\texttt{/dnsaddr/mainnet.ethswarm.org}). A detailed document about the
+format is describer
+\href{https://github.com/libp2p/specs/blob/master/addressing/README.md\#dnsaddr-links}{here}
+
+In order for an alternative client to connect to swarm it needs to be able to resolve this format to a valid underlay address.
+
+The steps are:
+\begin{itemize}
+\tightlist
+\item
+    getting the TXT value from the DNS server:
+
+    \noindent -\ \_dnsaddr.mainnet.ethswarm.org.\ 30\ IN\ \ \ \ TXT\ \ \ \ \ "dnsaddr=/dnsaddr/swarm-1.mainnet.ethswarm.org"   
+\item
+  resolving this value to it's next TXT record:
+
+  \noindent dig\ TXT\ \_dnsaddr.swarm-1.mainnet.ethswarm.org\ \_dnsaddr.swarm-1.mainnet.ethswarm.org.\ 30\ IN\ TXT\ "dnsaddr=/dnsaddr/bee-1.mainnet.ethswarm.org"
+\item
+  resolving the TXT record to the underlay address value:
+
+   \noindent \_dnsaddr.bee-1.mainnet.ethswarm.org.\ 30\ IN\ TXT\ \ "dnsaddr=/ip4/3.75.238.129/tcp/31101/p2p/QmbyCMd2LABgwDVz4eT7vJhkV3LmFMJgcbjGeVfjGkvBQ9"
+\item
+  the resulting address should be accessible and accepting connections.
+\end{itemize}
+
+While the implementation can support connecting to multiple addresses
+exposed by the same node (for better connectivity) it is enough to
+connect to one to join the swarm network.
+
+Worth mentioning that the level at which the underlay value resides can
+be arbitrary and an alternative client should support recursive lookups
+until such value is found.
+
+\subsubsection{Optional components}\label{optional-components}
+
+NAT - the client is free to use any available tool as it does not
+interfere with the network in any significant way.
+
+The recommended serialization is Protobuf with varint delimited messages
+in streams.

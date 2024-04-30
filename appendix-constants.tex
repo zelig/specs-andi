@@ -1,0 +1,36 @@
+\chapter{Parameter constants \statusgreen}
+\label{sec:constants}
+
+% \subsection*{}
+Table \ref{tab:constants} 
+lists the constants used by Swarm with their type, default value and description.
+% {\small 
+
+\begin{longtable}{l|l|p{.07\textwidth}|p{.45\textwidth}}
+\toprule
+\textsc{constant name}&\textsc{type}&\textsc{value}&\textsc{description}\\\midrule
+\texttt{BZZ\_NETWORK\_ID} & \textit{uint64} & 0 & ID of the swarm network
+\\
+\texttt{PHASE\_LENGTH} & \textit{uint64} &  38& length of commit phase of the redistribution game round in number of blocks
+\\
+\texttt{ROUND\_LENGTH} & \textit{uint64} & 152 & length of one redistribution game round in number of blocks, fixed at $4$ times the $\mathtt{PHASE\_LENGTH}$
+\\
+\texttt{NODE\_RESERVE\_DEPTH} & \textit{uint8}&  23 & size requirement for client reserve capacity given in log number of chunks                               
+\\
+\texttt{SAMPLE\_DEPTH} & \textit{uint8} & 4 & base 2 log number of chunks in sample
+\\
+\texttt{MAX\_SAMPLE\_VALUE} & \textit{uint256} & $1.2844e+72$ & maximum value for last transformed address in reserve sample, i.e., $<{}1\%$ chance the sampled set size is below a fourth of the prescribed node reserve size.
+\\  
+\texttt{MINIMUM\_STAKE} & \textit{uint256} & 10 & minimum stake amount in BZZ to be redefined as minimum stake given in storage rent units
+\\
+\texttt{MIN\_STAKE\_AGE} & \textit{uint256} & 228 & minimum number of blocks stakers need to wait after update or creation for the stake to be useable. Defaults to one and a half rounds to prevent opportunistic manipulation of stake after a neighbourhood is selected.
+\\% \texttt{PRICE\_SIGNAL\_COEFF} & \textit{uint64} &  & 
+% \\
+\texttt{PRICE\_2X\_ROUNDS} & \textit{uint64} & 64 & number of rounds it takes for the price to double in the presence of a consistent lowest degree signal of undersupply.
+\\
+\texttt{NHOOD\_PEER\_COUNT} & \textit{uint8} & 4 & minimum number of nodes required to form a fully connected neighbourhood.
+\\\bottomrule
+\caption{Parameter constants}
+\label{tab:constants}
+\end{longtable}
+

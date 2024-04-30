@@ -1,0 +1,264 @@
+The retrieval of a chunk is a process which fetches a given chunk from
+the network by its address. Swarm involves a direct storage scheme of
+fixed size where chunks are stored on nodes with address corresponding
+to the chunk address. The retrieval protocols acts in such a way that it
+reaches those neighborhoods whenever a request is initiated. Such a
+route is sure to exist as a result of the Kademlia topology of
+keep-alive connections between peers.
+
+The process of relaying the request from the initiator to the storer is
+called forwarding (pushsync) and also the process of passing the chunk
+data along the same path is called backwarding.
+
+Conversely - Backwarding and Forwarding are both notions defined on a
+keep alive network of peers as strategies of reaching certain addresses.
+
+If we zoom into a particular node in the retrieval path we see the
+following strategy:
+\begin{itemize}
+\tightlist
+\item
+  Receive the request
+\item
+  Decide who to forward the request to (decision strategy)
+\item
+  Have a way to match the the response to the original request
+\end{itemize}
+
+The key elements of the second step are:
+\begin{itemize}
+\tightlist
+\item
+  the strategy of choosing the peer to forward the request to
+\item
+  how they react to failure like stream closure or nodes dropping
+  offline or closing the protocol connection
+\item
+  whether we proactively initiate several requests to peers
+\end{itemize}
+
+Retrieval protocol defines the following streams:
+\begin{itemize}
+    \item ID: \texttt{/swarm/retrieval/1.4.0/retrieval}
+    \item Serialization: Varint delimited Protobuf
+\end{itemize}
+
+Message definitions:
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{syntax = }\StringTok{"proto3"}\NormalTok{;}
+
+\KeywordTok{package}\NormalTok{ retrieval;}
+
+\KeywordTok{message}\NormalTok{ Request \{}
+  \DataTypeTok{bytes}\NormalTok{ Addr = }\DecValTok{1}\NormalTok{;}
+\NormalTok{\}}
+
+\KeywordTok{message}\NormalTok{ Delivery \{}
+  \DataTypeTok{bytes}\NormalTok{ Data = }\DecValTok{1}\NormalTok{;}
+  \DataTypeTok{bytes}\NormalTok{ Stamp = }\DecValTok{2}\NormalTok{;}
+  \DataTypeTok{string}\NormalTok{ Err = }\DecValTok{3}\NormalTok{;}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Requesting side}\label{requesting-side-1}
+
+Requesting node creates a stream and sends a \texttt{Request} message,
+specifying the chunk address and waits for the \texttt{Delivery}
+response message. If the response message contains a non empty
+\texttt{Err} field the requesting node closes the stream and then can
+re-attempt retrieving the chunk from the next peer candidate.
+
+\subsubsection{Responding side}\label{responding-side-1}
+
+When the stream is created, the responding node should wait for the
+retrieval \texttt{Request} from the downstream. Once the request is
+received, the responding side will perform the steps below.
+
+\begin{itemize}
+\tightlist
+\item
+  Given a valid chunk address the first thing we do is lookup the chunk
+  in the local store.
+\item
+  If the chunk is not found locally we forward the request to the
+  network.
+\item
+  If we get the chunk from the network we might put it in the cache to
+  avoid the extra cost in case the same address is requested repeatedly.
+\item
+  If the chunk is not present or other errors have occurred in the
+  process we return the unsuccessful response to the requester,
+  otherwise we return the chunk with the associated stamp.
+\end{itemize}
+
+A successful response is a \texttt{Delivery} message with an empty error
+that will contain the chunk data and its associated stamp. After the
+response is sent, this node should wait for requesting node to close
+it's side of the stream before closing the streaming and moving on.
+
+\subsubsection{Retries and error cases}\label{retries-and-error-cases}
+
+If the node that requested a chunk receives an error from the upstream
+it might retry the action unless it receives an explicit error code that
+the chunk has not been found. In this case it will moved on to the next
+peer candidate and repeat the request. If the failure reason is that the
+requesting peer is in overdraft, it will de-prioritize the corresponding
+upstream, giving it time to allow for balance replenishment. A
+`backwarder' will give up after the first failure while an `origin' node
+might repeat the request multiple time towards the same peer before
+giving up. A `multiplexer' might attempt to fetch the chunk more than
+one time since being in the close reach of the neighborhood it has a
+higher chance of finding the chunk.
+
+The retrieval of a chunk is a process which fetches a given chunk from the network by its address.
+
+It follows the general semantics of the chunk syncing described above and follows the same network path as the push sync protocol, but in reverse.
+
+%\subsection{ \statusorange} Protocol breach
+
+%- Receiving a repeated request for a non-existent chunk should lead to rate limiting in order to discourage resource wasteful actions.
+%- Receiving a response in the form of an invalid chunk constitutes a protocol breach and punishing measures are being taken against the peer at fault.
+
+%```markdown
+%step I
+%1) check if this exact request has been received withing last N minutes and it is for a non-existent chunk
+%2) if such request is found - take punishing measures against the requester (blocklisting)
+%3) request a peer from Kademlia
+%4) request chunk from the peer
+%5) if the peer does not return a valid chunk - go back to step 3
+%6) if the chunk is found and valid, log the event details in the local state and return the chunk to the requester
+%7) consider caching the chunk in case there might be a repeated request for it
+
+%Error states
+%- if we exhaust the list of peers (candidates) for this action, return a 'failure to get chunk' response to the requester. We might consider increasing our peer connections pool to avoid such situation in the fugure
+%- if we are able to conclude that the chunk is non-existent (TBD) we return 'chunk not found' and consider rate limiting measures against the requester.
+%- if we ran out of allowed time while looking for the chunk we return a 'timeout' response to the requester
+%- if the chunk is retrieved successfully but does not pass validation, take punishing measures against the peer (blocklisting).
+%- if the attempt fails, log the relevant attempt details in the local state and repeat the attempt against a new peer
+%- if the peer times out responding to our request we log the attempt details and repeat step II against a new peer
+%```
+
+%\subsection{ \statusorange} Request chunk - sequence diagram
+
+%```mermaid
+%sequenceDiagram
+%    Originator->>+Backwarder: Request for chunk
+%    Backwarder->>+Backwarder: Have I seen this request before
+%    Backwarder->>-Originator: Reject duplicate request
+%    Backwarder->>+Backwarder: Request next peer from the Kademlia iterator
+%    Backwarder->>+Storer: Request for chunk
+%    Storer->>-Backwarder: Success
+%    Backwarder->>-Originator: Return chunk
+%```
+
+%\subsection{ \statusorange} Request chunk - flow diagram
+
+%```mermaid
+%flowchart TD
+%    A[Get next peer from Kademlia] --> H{Any time left?}
+%    H --> |No| I(Reject request) --> S[STOP]
+%    H --> |Yes| M{Any peers left}
+%    M --> |Yes| N(Request the chunk from peer) --> K{Check response}
+%    M --> |No peers left to try| I
+%    K --> |Timeout| L(Update peer stats) --> A
+%    K --> |Invalid chunk| N1(Punish peer) --> A
+%    K --> |Success| R(Return the chunk to the upstream peer) --> S
+%```
+
+%\subsection{ \statusorange} Appendix
+
+%The protobuf definitions
+
+%\begin{definition}[Retrieval protocol messages]\label{def:retrieval-messages}
+
+%\begin{lstlisting}[]
+%// /swarm/retrieval/1.0.0/
+%syntax = "proto3";
+
+%package retrieval;
+
+%option go_package = "pb";
+
+%message Request {
+%  bytes Addr = 1;
+%}
+
+%message Delivery {
+%  bytes Data = 1;
+%  bytes Stamp = 2;
+%}}
+
+%\end{lstlisting}
+%\end{definition}
+
+%OLD VERSION
+
+%\subsection{Simple Summary \statusorange}
+%Standardisation of the bzz-retrieve protocol which allows for nodes to issue requests for content addressed data and for their counterparts to deliver that content
+
+%\subsection{Abstract \statusorange}
+%Every node that fully participates in the Swarm is expected to request, deliver or forward requests for chunk retrievals. This is to be done using a simple p2p protocol that negotiates the delivery of those data chunks.
+
+%\subsection{Motivation \statusorange}
+%Different Swarm implementations must standardise the way chunk delivery is made. In order for the devp2p protocols on these nodes to correctly negotiate and establish normal operations, the underlying protocol messages and exchange rules must be thoroughly defined. Doing so should pave the way for a simplified reimplementation of Swarm in other clients and languages.
+
+%\subsection{Specification \statusorange}
+%<!--The technical specification should describe the syntax and semantics of any new feature. The specification should be detailed enough to allow competing, interoperable implementations for the current Swarm platform and future client implementations.-->
+%The Swarm retrieval protocol is defined as a `devp2p` protocol with the following parameters:
+%Protocol name:    bzz-retrieve
+%Current version:  2
+%Max Msg Size:     10 * 1024 * 1024
+
+%Types of nodes and their participation in the retrieval protocol:
+%1. Bootnode - does not participate in the `bzz-retrieve` protocol
+%2. Light node - participates but does not handle retrieve requests (handles ChunkDelivery message and issues RetrieveRequest messages)
+%3. Full node - participates fully (issues and handles both RetrieveRequest and ChunkDelivery messages)
+
+%Protocol Messages:
+%1. ChunkDelivery
+%2. RetrieveRequest
+
+%The protocol messages are defined in the following manner:
+
+%1. RetrieveRequest is the message used to issue a request for a single chunk over the Swarm. When a chunk is not found locally on the node handling the message from the requester, that node is expected to send another
+%RetrieveRequest to the node it sees fit in order to get the chunk. In turn, if that node does not find the chunk, another RetrieveRequest is expected to happen and so forth until the chunk is found.
+%Once a chunk is found, it is sent back to the requesting node which in turn forwards the chunk back to the node which requested it etc, until the whole cascade of requests is resolved with the delivery of the
+%wanted chunk to the original requester of the chunk.
+
+%The definition of the RetrieveRequest message:
+%```go
+%type RetrieveRequest struct {
+%	Ruid uint
+%	Addr storage.Address
+%}
+%```
+
+%The RetrieveRequest defines two fields:
+%a. Ruid - a unique, random `uint32` generated on the requesting node to associate a certain requested chunk with a node
+%b. Addr - a 32-byte chunk hash to retrieve
+
+%2. ChunkDelivery is used in order to deliver chunks over the Swarm. It is the cornerstone of every bit that should be delivered over Swarm. Each ChunkDelivery message represents a delivery of one discrete chunk.
+%A ChunkDelivery must always be preceded by a RetrieveRequest message. This mitigates the risk of misbehaving nodes spamming other nodes with unwanted content, causing their local storage to be
+%filled with unsolicited content.
+
+%The definition of the ChunkDelivery message:
+%```go
+%type ChunkDelivery struct {
+%	Ruid  uint
+%	Addr  storage.Address
+%	SData []byte
+%}
+%```
+
+%The ChunkDelivery message defines 3 fields:
+%a. Ruid - a unique, random `uint32` that corresponds to the Ruid of the incoming RetrieveRequest message for which the ChunkDelivery was sent.
+%b. Addr - the 32-byte chunk address of the delivered chunk
+%c. SData - an arbitrary byte array containing the chunk data
+
+
+%Notes:
+%1. The requester node \textit{MUST} check that a Ruid on an incoming ChunkDelivery message exists for the specific peer from which the chunk was delivered. If the given Ruid cannot be found - that peer should be treated as a misbehaving node and should be dropped
+%2. The requester node \textit{MUST} check that the address on an incoming ChunkDelivery is identical to the requested chunk address that is associated with the request's unique identifier (Ruid). If the chunk addresses do not match - that node should be treated as a misbehaving node and should be dropped
+%3. The requester node \textit{MUST} verify that the content of the delivered chunk, after hashing, corresponds to the requested chunk address. If the hashes do not match - the node from which the chunk delivery was received should be treated as a misbehaving node and should be dropped.
